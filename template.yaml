@@ -1,0 +1,135 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Villages Florida Events Calendar Sync Application
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - prod
+    Description: Environment name for the deployment
+  
+  ScheduleExpression:
+    Type: String
+    Default: cron(0 6 * * ? *)
+    Description: EventBridge cron expression for daily sync (default is 6 AM UTC daily)
+
+Globals:
+  Function:
+    Timeout: 300
+    MemorySize: 512
+    Runtime: python3.11
+    Architectures:
+      - arm64
+
+Resources:
+  VillagesEventsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub villages-events-sync-${Environment}
+      CodeUri: .
+      Handler: lambda_function.lambda_handler
+      Description: Syncs Villages Florida calendar events to DynamoDB
+      Role: !GetAtt VillagesEventsFunctionRole.Arn
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref VillagesEventsTable
+          LOG_LEVEL: INFO
+          DAYS_AHEAD: '90'
+          TIMEOUT_SECONDS: '30'
+      Events:
+        DailySchedule:
+          Type: Schedule
+          Properties:
+            Schedule: !Ref ScheduleExpression
+            Name: !Sub villages-events-daily-sync-${Environment}
+            Description: Triggers daily sync of Villages events
+            Enabled: true
+
+  VillagesEventsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub villages-events-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: event_id
+          AttributeType: S
+        - AttributeName: event_date
+          AttributeType: S
+        - AttributeName: start_time
+          AttributeType: S
+      KeySchema:
+        - AttributeName: event_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: date-index
+          KeySchema:
+            - AttributeName: event_date
+              KeyType: HASH
+            - AttributeName: start_time
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: villages-events-sync
+
+  VillagesEventsFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub villages-events-function-role-${Environment}
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DynamoDBAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:GetItem
+                  - dynamodb:Scan
+                  - dynamodb:DeleteItem
+                  - dynamodb:BatchWriteItem
+                Resource:
+                  - !GetAtt VillagesEventsTable.Arn
+
+Outputs:
+  FunctionArn:
+    Description: ARN of the Villages Events Sync Lambda function
+    Value: !GetAtt VillagesEventsFunction.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-FunctionArn
+  
+  TableName:
+    Description: Name of the DynamoDB table storing events
+    Value: !Ref VillagesEventsTable
+    Export:
+      Name: !Sub ${AWS::StackName}-TableName
+  
+  ScheduleExpression:
+    Description: EventBridge schedule expression for daily sync
+    Value: !Ref ScheduleExpression
+    Export:
+      Name: !Sub ${AWS::StackName}-ScheduleExpression
+  
+  TableArn:
+    Description: ARN of the DynamoDB table
+    Value: !GetAtt VillagesEventsTable.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-TableArn

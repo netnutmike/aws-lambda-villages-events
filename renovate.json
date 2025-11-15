@@ -1,0 +1,28 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:base"
+  ],
+  "schedule": [
+    "every weekend"
+  ],
+  "packageRules": [
+    {
+      "matchDatasources": ["pypi"],
+      "groupName": "Python dependencies",
+      "automerge": true,
+      "automergeType": "pr",
+      "matchUpdateTypes": ["minor", "patch"]
+    },
+    {
+      "matchDatasources": ["pypi"],
+      "matchUpdateTypes": ["major"],
+      "automerge": false
+    }
+  ],
+  "commitMessagePrefix": "chore(deps):",
+  "prHourlyLimit": 2,
+  "prConcurrentLimit": 5,
+  "separateMajorMinor": true,
+  "separateMinorPatch": false
+}
