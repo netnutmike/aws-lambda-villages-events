@@ -8,3 +8,4 @@ pytest>=7.4.0
 pytest-cov>=4.1.0
 moto>=4.2.0
 responses>=0.24.0
+cryptography>=46.0.5 # not directly required, pinned by Snyk to avoid a vulnerability
